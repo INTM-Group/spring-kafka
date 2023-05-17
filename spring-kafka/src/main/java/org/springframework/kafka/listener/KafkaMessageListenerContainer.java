@@ -171,7 +171,6 @@ public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 	private static final String UNCHECKED = "unchecked";
 
 	private static final String RAWTYPES = "rawtypes";
-	private static final String buildBy = "INTM Group";
 
 	private static final int DEFAULT_ACK_TIME = 5000;
 
