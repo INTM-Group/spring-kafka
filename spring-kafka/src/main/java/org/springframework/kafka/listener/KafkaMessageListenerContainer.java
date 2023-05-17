@@ -161,6 +161,7 @@ import io.micrometer.observation.ObservationRegistry;
  * @author Tomaz Fernandes
  * @author Francois Rosiere
  * @author Daniel Gentes
+ * @author Thibault et Henry
  */
 public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 		extends AbstractMessageListenerContainer<K, V> implements ConsumerPauseResumeEventPublisher {
@@ -170,6 +171,7 @@ public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 	private static final String UNCHECKED = "unchecked";
 
 	private static final String RAWTYPES = "rawtypes";
+	private static final String buildBy = "INTM Group";
 
 	private static final int DEFAULT_ACK_TIME = 5000;
 
@@ -1516,6 +1518,7 @@ public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 			}
 			debugRecords(records);
 
+			savePositionsIfNeeded();
 			invokeIfHaveRecords(records);
 			if (this.remainingRecords == null) {
 				resumeConsumerIfNeccessary();
@@ -1549,7 +1552,7 @@ public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 		private void invokeIfHaveRecords(@Nullable ConsumerRecords<K, V> records) {
 			if (records != null && records.count() > 0) {
 				this.receivedSome = true;
-				savePositionsIfNeeded(records);
+				savePositionsIfNeeded();
 				notIdle();
 				notIdlePartitions(records.partitions());
 				invokeListener(records);
@@ -1621,10 +1624,10 @@ public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 			}
 		}
 
-		private void savePositionsIfNeeded(ConsumerRecords<K, V> records) {
+		private void savePositionsIfNeeded() {
 			if (this.fixTxOffsets) {
 				this.savedPositions.clear();
-				records.partitions().forEach(tp -> this.savedPositions.put(tp, this.consumer.position(tp)));
+				this.consumer.assignment().forEach(tp -> this.savedPositions.put(tp, this.consumer.position(tp)));
 			}
 		}
 
@@ -1633,17 +1636,17 @@ public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 			if (this.fixTxOffsets) {
 				try {
 					Map<TopicPartition, OffsetAndMetadata> toFix = new HashMap<>();
-					this.lastCommits.forEach((tp, oamd) -> {
+					this.savedPositions.forEach((tp, saved) -> {
 						long position = this.consumer.position(tp);
-						Long saved = this.savedPositions.get(tp);
+						OffsetAndMetadata comitted = this.lastCommits.get(tp);
 						if (saved != null && saved.longValue() != position) {
 							this.logger.debug(() -> "Skipping TX offset correction - seek(s) have been performed; "
 									+ "saved: " + this.savedPositions + ", "
-									+ "comitted: " + oamd + ", "
+									+ "comitted: " + comitted + ", "
 									+ "current: " + tp + "@" + position);
 							return;
 						}
-						if (position > oamd.offset()) {
+						if (comitted == null || position > comitted.offset()) {
 							toFix.put(tp, createOffsetAndMetadata(position));
 						}
 					});
